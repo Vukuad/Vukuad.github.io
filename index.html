@@ -1,63 +1,358 @@
+
 <!DOCTYPE html>
+<html lang="en">
+<head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>polygon bisection spiral</title>
+<script>
+
+// canvas context
+var ctx;
+
+// point in time
+var pot = 0;
+
+var pot_increment = 1;
+
+// math constants
+const TAU = 2 * Math.PI;
+const PHI = ( 1 + Math.sqrt(5) ) / 2;
+const SQRT3 = Math.sqrt(3);
+
+window.onload = function() {
+    document.body.innerHTML =
+'<canvas id="canvas"'
++' width="'+window.innerWidth+'" height="'+window.innerHeight+'"'
++' onmousemove="updateMouse(event.clientX-this.offsetLeft, event.clientY-this.offsetTop)"'
++'></canvas>'
+//+'<pre id="console" style="position:absolute;bottom:0;left:0;background:#000;"></pre>'
++'';
+    var canvas = document.getElementById('canvas');
+    if (canvas.getContext) {
+        ctx = canvas.getContext('2d');
+        ctx.strokeStyle = '#000';
+        ctx.save();
+        pd = randi(9)+23;
+        pr = Math.random()/pd;
+        pg = Math.random()/pd;
+        pb = Math.random()/pd;
+        init();
+        life();
+    }
+    else alert('Looks like your browser doesn\'t support HTML5 canvas.  Try a recent version of Firefox.');
+}
+
+// objects to draw on canvas
+var sprites = [];
+
+// colour periods
+var pr, pg, pb;
+
+// colour period divisor
+var pd=10;
+
+var randomize_colours=true;
+
+const colour_period_increment = Math.E / Math.pow(PHI,2);
+
+var max_width = 512;
+
+function init() {
+    ctx.strokeStyle = '#fff';
+    ctx.fillStyle = '#337';
+    max_width = canvas.height<canvas.width ? canvas.width : canvas.height;
+    sprites.push(new fractal_Polygon_Bisection());
+};
+
+function reinit() {
+    sprites = [];
+    pot = 0;
+    init();
+};
+
+function life() {
+
+    // stop drawing when the window is unfocused
+    if (!focused) return window.setTimeout(life, 333);
+
+    pot++;
+
+    // debug output
+    //console.reset();
+    //console.log(sprites[0].zangle);
+
+    if (auto_rotate_increment) {
+        ctx.translate(canvas.width/2,canvas.height/2);
+        ctx.rotate(auto_rotate_increment);
+        ctx.translate(-canvas.width/2,-canvas.height/2);
+    }
+
+    if (randomize_colours && lottery(666)) {
+        if (lottery(7)) pd = randi(97)+13;
+        if (lottery(3)) pr = Math.random()/pd;
+        if (lottery(3)) pg = Math.random()/pd;
+        if (lottery(3)) pb = Math.random()/pd;
+    }
+
+    // draw
+    for (var i in sprites)
+        sprites[i].draw();
+
+    // schedule the next frame (endless loop)
+    vsync(life);
+    //window.setTimeout(life,360); // slo-mo
+}
+
+function fractal_Polygon_Bisection(x, y, recursions, sides) {
+    var self = this;
+
+    this.x = x === undefined ? Math.floor(canvas.width/2) : x;
+    this.y = y === undefined ? Math.floor(canvas.height/2) : y;
+    this.recursions = recursions === undefined ? 13 : parseInt(recursions);
+
+    this.period = max_width;
+
+    this.set_sides = function(sides) {
+        self.sides = sides === undefined ? 3 + randi(4) : parseInt(sides);
+        self.zangle = TAU / self.sides;
+        //self.base_width = max_width / Math.cos(Math.PI / self.sides) * 2 * Math.sin(Math.PI / self.sides);
+        self.recursions = 13 * self.sides + 3;
+        //self.period = Math.floor( self.base_width - max_width );
+        //self.period = self.sides < 4 ? self.sides * max_width : max_width / (self.sides - 3);
+        self.period = Math.round( (max_width / Math.pow( 1 / Math.cos(Math.PI / self.sides), -2)) - max_width - 1 );
+        auto_rotate_increment = TAU / self.period / self.sides;
+    };
+
+    this.set_sides(sides);
+
+    this.draw = function() {
+        self.width = max_width + pot % (self.period - 1);
+        self.draw_children(self.x, self.y, -1, self.recursions);
+    };
+
+    this.draw_children = function(x, y, generation, recursions_left) {
+
+        var p = pot + generation;
+
+        ctx.strokeStyle = '#'
+            + chex(Math.floor(Math.sin(p*pr)*128) + 128)
+            + chex(Math.floor(Math.sin(p*pg)*128) + 128)
+            + chex(Math.floor(Math.sin(p*pb)*128) + 128)
+            ;
+
+        recursions_left--;
+        generation++;
+
+        if (recursions_left==0 && generation%2==0) {
+            ctx.translate(canvas.width/2,canvas.height/2);
+            ctx.rotate(TAU/self.sides/2);
+            ctx.translate(-canvas.width/2,-canvas.height/2);
+        }
+
+        var side_length = self.width / Math.pow( 1 / Math.cos(Math.PI / self.sides), generation);
+
+        //var side_length = pot%2==1 ? self.width / Math.pow( 2, generation) :  self.width / Math.pow( 2, generation) * 0;
+
+        var dx = side_length / 2;
+
+        // apothem
+        var dy = dx / Math.sin(Math.PI / self.sides) * Math.cos(Math.PI / self.sides);
+
+        x -= dx;
+        y -= dy;
+
+        var direction = 0;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        for(var i = 0; i<self.sides; i++) {
+            if (i) direction += self.zangle;
+            x += side_length *  Math.cos(direction);
+            y += side_length * Math.sin(direction);
+            ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+        ctx.translate(canvas.width/2,canvas.height/2);
+        ctx.rotate(TAU/self.sides/2);
+        ctx.translate(-canvas.width/2,-canvas.height/2);
+
+        if (recursions_left>0) self.draw_children(x + dx, y + dy, generation, recursions_left);
+
+    };
+
+}
+
+/*
+var console = {
+    self: null
+    ,log: function (msg) {
+        document.getElementById('console').innerHTML += msg+'\n';
+    }
+    ,reset: function () {
+        document.getElementById('console').innerHTML = '';
+    }
+}
+*/
+
+var mouse_x = 0;
+var mouse_y = 0;
+function updateMouse(x, y) {
+    pot += mouse_y - y;
+    //Math.atan( (mouse_x - x) / mouse_y - y) );
+    ctx.translate(canvas.width/2,canvas.height/2);
+    ctx.rotate((mouse_x - x)*auto_rotate_increment);
+    ctx.translate(-canvas.width/2,-canvas.height/2);
+    mouse_x = x;
+    mouse_y = y;
+}
+
+const rotate_increment = TAU / Math.pow(PHI,2);
+
+var auto_rotate_increment = 0;
+//var auto_rotate_increment = (rotate_increment*305/3)%TAU;
+//var auto_rotate_increment = (rotate_increment*1738/3)%TAU;
+
+window.onkeydown = function(e) {
+    var k = (e?e:event).which;
+    switch (k) {
+
+        case 16: // shift
+            pot = 0;
+            break;
+
+        case 13: // enter
+            ctx.restore();
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            randomize_colours = false;
+            //break;
+
+        case 32: // space
+            ctx.restore();
+            ctx.save();
+            //break;
+
+        case 27: // esc
+            auto_rotate_increment = 0;
+            break;
+
+        case 8: // bksp
+            ctx.restore();
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            break;
+
+        case 48: // 0
+        case 45: // 0
+            pr = pg = pb = colour_period_increment * .01;
+            break;
+
+        // -
+        case 173: // -
+        case 109: // -
+        case 189: // -
+            if (sprites[0].recursions>1)
+                sprites[0].recursions--;
+            break;
+
+        // +
+        case 61: // =
+        case 107: // +
+        case 187: // +
+            sprites[0].recursions++;
+            break;
+
+        // red
+        case 65: // a
+            pr /= colour_period_increment;
+            break;
+        case 81: // q
+            pr *= colour_period_increment;
+            break;
+
+        // green
+        case 83: // s
+            pg /= colour_period_increment;
+            break;
+        case 87: // w
+            pg *= colour_period_increment;
+            break;
+
+        // blue
+        case 68: // d
+            pb /= colour_period_increment;
+            break;
+        case 69: // e
+            pb *= colour_period_increment;
+            break;
+
+        case 38: // up
+            sprites[0].set_sides(sprites[0].sides + 1);
+            break;
+        case 40: // down
+            if (sprites[0].sides>3)
+                sprites[0].set_sides(sprites[0].sides - 1);
+            break;
+        case 37: // left
+            auto_rotate_increment -= rotate_increment / 3;
+            break;
+        case 39: // right
+            auto_rotate_increment += rotate_increment / 3;
+            break;
+
+        case 192: // ~
+        case 55: // 7
+            reinit();
+            pr = .07056648300463568;
+            pg = .06304358024433408;
+            pb = .11501330706131468;
+            sprites[0].set_sides(7);
+            auto_rotate_increment = -0.59847478405944227696;
+            break;
+
+        //default: alert('k='+k);
+    }
+};
+
+var focused = true;
+window.onfocus = function() {focused = true;};
+window.onblur = function() {focused = false;};
+
+window.onresize = function() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    reinit();
+};
+
+window.onclick = reinit;
+
+window.vsync = (function(){ return window.requestAnimationFrame
+||  window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame || window.oRequestAnimationFrame || window.msRequestAnimationFrame
+||  function(callback,element){window.setTimeout(callback,16.66);}
+})();
+
+// convert int(0-255) to hex colour code
+function chex(i) {
+    var h=i.toString(16);
+    switch(h.length){
+        case 2: return h;
+        case 1: return '0'+h;
+    }
+    return i > 255 ? 'ff' : '00';
+}
+
+function lottery(p) {return Math.floor(Math.random()*p) == p-1;}
+
+function randi(i) {return Math.floor(Math.random()*(i+1));}
+
+</script>
 <style>
-
-
-  html, body {
-  height: 100%;
-}
-body {
-  background: #000;
-  color: #fff;
-  font-family: 'Chango', cursive;
-}
-
-.container {
-  display: flex;
-	align-items: center;
-	justify-content: center;
-	height: 100vh;
-  filter: url("#effect");
-}
-
-.acid {
-  font-size: 4vw;
-  letter-spacing: 10px;
-  border: 3vw solid;
-  padding: 4vw 5vw;
-  animation: spin 3s ease-in-out alternate infinite;
-}
-
-@keyframes spin {
-  0% {
-    transform: rotate(-25deg);
-  }
-  100% {
-    transform: rotate(25deg);
-  }
-}
-
-
-
+* {margin:0;padding:0;}
+body {overflow:hidden;background:#000;color:#0f0;font-family:monospace;font-size:16px;text-align:center;}
 </style>
+</head>
 <body>
-  <div class="container">
-  <h1 class="acid">
-    <span>Man,</span><br/>
-    <span>I'm drunk!</span>
-  </h1>
-</div>
-
-<svg xmlns="http://www.w3.org/2000/svg" version="1.1">
-  <defs>   
-    <filter id="effect">
-      <feTurbulence id="turbulence" baseFrequency="0.01" numOctaves="2" seed="1"/>
-      <feDisplacementMap in="SourceGraphic" scale="30" />
-    </filter>
-  </defs> 
-  </svg>
-  
-  <script>
-
-    
-  </script>
+<p>HTML5 &amp; javascript are required.</p>
+</body>
+</html>
